@@ -316,6 +316,286 @@ def plot_data_by_varname(ax, df, var_name, Y):
     ax.add_table(table)
 
 
+def plot_interactive_panel(df, Y):
+    """Variable-selector panel with max_discr filter.
+
+    Two controls:
+    - ``min max_discr`` slider: hides variables whose max_discr is below the
+      chosen threshold, so you can focus on the most discriminating ones.
+    - ``Variable`` dropdown: lists surviving variables sorted by max_discr
+      (highest first); each option shows the variable name and its score.
+
+    Renders an enhanced Plotly chart for the selected variable.
+    Call from a Jupyter notebook cell.
+    """
+    import ipywidgets as widgets
+    from IPython.display import display, clear_output
+
+    # max_discr is the same for every row of a variable – grab one per var
+    var_discr = (
+        df.groupby('varname')['max_discr']
+        .first()
+        .sort_values(ascending=False)
+    )
+    discr_min = float(round(var_discr.min(), 4))
+    discr_max = float(round(var_discr.max(), 4))
+    step = float(round((discr_max - discr_min) / 100, 4)) if discr_max > discr_min else 0.001
+
+    def _var_options(min_discr):
+        """Return (label, varname) option pairs for vars >= min_discr."""
+        filtered = var_discr[var_discr >= min_discr]
+        if filtered.empty:
+            filtered = var_discr.iloc[:1]
+        return [(f"{v}  (discr={s:.3f})", v) for v, s in filtered.items()]
+
+    # ── widgets ──────────────────────────────────────────────────────────
+    slider = widgets.FloatSlider(
+        value=discr_min,
+        min=discr_min,
+        max=discr_max,
+        step=step,
+        description='',
+        continuous_update=False,
+        readout=True,
+        readout_format='.3f',
+        layout=widgets.Layout(width='340px'),
+        style={'handle_color': '#2563EB'},
+    )
+    initial_options = _var_options(discr_min)
+    dropdown = widgets.Dropdown(
+        options=initial_options,
+        value=initial_options[0][1],
+        description='',
+        layout=widgets.Layout(width='320px'),
+    )
+
+    label_slider = widgets.HTML(
+        "<b style='font-size:12px;color:#555'>Min max_discr&nbsp;</b>",
+        layout=widgets.Layout(margin='6px 0 0 0'),
+    )
+    label_var = widgets.HTML(
+        "<b style='font-size:12px;color:#555'>Variable&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b>",
+        layout=widgets.Layout(margin='6px 0 0 0'),
+    )
+    output = widgets.Output()
+
+    def render(var_name):
+        import plotly.io as pio
+        from IPython.display import HTML as _HTML
+        with output:
+            clear_output(wait=True)
+            fig = _plot_varname_enhanced(df, var_name, Y)
+            html = pio.to_html(fig, include_plotlyjs='cdn', full_html=False)
+            display(_HTML(html))
+
+    def on_slider_change(change):
+        if change['name'] == 'value':
+            new_options = _var_options(change['new'])
+            # Update dropdown without triggering redundant renders
+            dropdown.unobserve(on_dropdown_change, names='value')
+            dropdown.options = new_options
+            dropdown.value = new_options[0][1]
+            dropdown.observe(on_dropdown_change, names='value')
+            render(new_options[0][1])
+
+    def on_dropdown_change(change):
+        if change['name'] == 'value' and change['new']:
+            render(change['new'])
+
+    slider.observe(on_slider_change, names='value')
+    dropdown.observe(on_dropdown_change, names='value')
+
+    header = widgets.VBox(
+        [
+            widgets.HBox([label_slider, slider]),
+            widgets.HBox([label_var, dropdown]),
+        ],
+        layout=widgets.Layout(
+            padding='10px 16px',
+            border='1px solid #e0e0e0',
+            border_radius='8px',
+            background_color='#fafafa',
+            margin='0 0 10px 0',
+        ),
+    )
+    display(widgets.VBox([header, output]))
+    render(initial_options[0][1])
+
+
+def _plot_varname_enhanced(df, var_name, Y):
+    """Enhanced single-variable Plotly chart with:
+    - Mean line + ±1 std band
+    - IQR band (25–75 %)
+    - Median markers
+    - n proportion bars on secondary axis
+    - Polished summary table
+    """
+    filtered_df = df[df['varname'] == var_name].copy()
+    if filtered_df.empty:
+        return go.Figure()
+
+    filtered_df['x_string'] = filtered_df['x_string'].fillna('Missing').astype(str)
+    gen_y_mean = filtered_df[f'gen_{Y}_mean'].iloc[0]
+    x_labels   = filtered_df['x_string'].tolist()
+    y_mean     = filtered_df[f'{Y}_mean'].values
+    y_std      = filtered_df[f'{Y}_std'].values
+    y_med      = filtered_df[f'{Y}_median'].values
+    y_q25      = filtered_df[f'{Y}_25%'].values
+    y_q75      = filtered_df[f'{Y}_75%'].values
+    n_prop     = (filtered_df['n_percentage'] / 100).values
+
+    # ── palette ──────────────────────────────────────────────────────────
+    C_MEAN  = '#2563EB'   # blue
+    C_MED   = '#7C3AED'   # purple
+    C_BAND  = 'rgba(37,99,235,0.10)'
+    C_IQR   = 'rgba(124,58,237,0.10)'
+    C_REF   = '#DC2626'   # red
+    C_BAR   = 'rgba(148,163,184,0.45)'  # slate
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        row_heights=[0.68, 0.32],
+        vertical_spacing=0.08,
+        specs=[[{"secondary_y": True}], [{"type": "table"}]],
+    )
+
+    # ── ±1 std band ───────────────────────────────────────────────────────
+    fig.add_trace(go.Scatter(
+        x=x_labels + x_labels[::-1],
+        y=list(y_mean + y_std) + list((y_mean - y_std)[::-1]),
+        fill='toself', fillcolor=C_BAND,
+        line=dict(color='rgba(0,0,0,0)'),
+        hoverinfo='skip', showlegend=True, name='±1 std',
+    ), row=1, col=1, secondary_y=False)
+
+    # ── IQR band (25–75 %) ────────────────────────────────────────────────
+    fig.add_trace(go.Scatter(
+        x=x_labels + x_labels[::-1],
+        y=list(y_q75) + list(y_q25[::-1]),
+        fill='toself', fillcolor=C_IQR,
+        line=dict(color='rgba(0,0,0,0)'),
+        hoverinfo='skip', showlegend=True, name='IQR (25–75%)',
+    ), row=1, col=1, secondary_y=False)
+
+    # ── mean line ─────────────────────────────────────────────────────────
+    fig.add_trace(go.Scatter(
+        x=x_labels, y=y_mean,
+        mode='lines+markers',
+        line=dict(color=C_MEAN, width=2.5),
+        marker=dict(size=8, color=C_MEAN, line=dict(color='white', width=1.5)),
+        name=f'{Y} mean',
+        hovertemplate='<b>%{x}</b><br>mean: %{y:.2f}<extra></extra>',
+    ), row=1, col=1, secondary_y=False)
+
+    # ── median markers ────────────────────────────────────────────────────
+    fig.add_trace(go.Scatter(
+        x=x_labels, y=y_med,
+        mode='markers',
+        marker=dict(size=9, color=C_MED, symbol='diamond',
+                    line=dict(color='white', width=1.5)),
+        name=f'{Y} median',
+        hovertemplate='<b>%{x}</b><br>median: %{y:.2f}<extra></extra>',
+    ), row=1, col=1, secondary_y=False)
+
+    # ── overall mean reference line ───────────────────────────────────────
+    fig.add_hline(
+        y=gen_y_mean,
+        line=dict(color=C_REF, width=1.5, dash='dot'),
+        annotation_text=f'Overall mean  {gen_y_mean:.2f}',
+        annotation_position='top right',
+        annotation_font=dict(color=C_REF, size=11),
+        row=1, col=1,
+    )
+
+    # ── n proportion bars (secondary y) ───────────────────────────────────
+    fig.add_trace(go.Bar(
+        x=x_labels, y=n_prop,
+        name='Population',
+        marker=dict(color=C_BAR, line=dict(color='rgba(0,0,0,0)')),
+        hovertemplate='<b>%{x}</b><br>%{customdata:.1%}<extra></extra>',
+        customdata=n_prop,
+        yaxis='y2',
+    ), row=1, col=1, secondary_y=True)
+
+    # ── summary table ─────────────────────────────────────────────────────
+    fmt = lambda v: f"{v:.2f}" if isinstance(v, (float, np.floating)) else str(v)
+    col_labels = ['Bucket', f'{Y} mean', f'{Y} std', f'{Y} median',
+                  'Q25', 'Q75', 'n', 'Pop %']
+    cell_values = [
+        filtered_df['x_string'].tolist(),
+        [fmt(v) for v in filtered_df[f'{Y}_mean']],
+        [fmt(v) for v in filtered_df[f'{Y}_std']],
+        [fmt(v) for v in filtered_df[f'{Y}_median']],
+        [fmt(v) for v in filtered_df[f'{Y}_25%']],
+        [fmt(v) for v in filtered_df[f'{Y}_75%']],
+        [str(int(v)) for v in filtered_df['n']],
+        [f"{v:.1%}" for v in n_prop],
+    ]
+    n_rows = len(filtered_df)
+    row_fill = ['#F1F5F9' if i % 2 == 0 else 'white' for i in range(n_rows)]
+
+    fig.add_trace(go.Table(
+        header=dict(
+            values=[f'<b>{c}</b>' for c in col_labels],
+            fill_color='#1E3A5F',
+            font=dict(color='white', size=11, family='Arial'),
+            align='center', height=30,
+            line=dict(color='#1E3A5F'),
+        ),
+        cells=dict(
+            values=cell_values,
+            fill_color=[row_fill] * len(col_labels),
+            align='center',
+            font=dict(size=10.5, family='Arial'),
+            height=26,
+            line=dict(color='#E2E8F0'),
+        ),
+    ), row=2, col=1)
+
+    # ── axes & layout ─────────────────────────────────────────────────────
+    fig.update_yaxes(
+        title_text=f'{Y}',
+        title_font=dict(color=C_MEAN, size=12),
+        tickfont=dict(color=C_MEAN, size=11),
+        gridcolor='rgba(0,0,0,0.06)',
+        zeroline=False,
+        row=1, col=1, secondary_y=False,
+    )
+    fig.update_yaxes(
+        title_text='Population',
+        title_font=dict(color='#94A3B8', size=11),
+        tickfont=dict(color='#94A3B8', size=10),
+        tickformat='.0%',
+        showgrid=False,
+        range=[0, n_prop.max() * 3.5],
+        row=1, col=1, secondary_y=True,
+    )
+    fig.update_xaxes(tickangle=-35, tickfont=dict(size=11), row=1, col=1)
+    fig.update_layout(
+        title=dict(
+            text=f'<b>{Y}</b>  ·  by  <b>{var_name}</b>',
+            font=dict(size=16, color='#1E293B', family='Arial'),
+            x=0.02, y=0.98,
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        legend=dict(
+            orientation='h', yanchor='bottom', y=1.01, xanchor='right', x=1,
+            font=dict(size=11), bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='#E2E8F0', borderwidth=1,
+        ),
+        margin=dict(t=70, b=10, l=60, r=70),
+        bargap=0.25,
+        hovermode='x unified',
+        hoverlabel=dict(bgcolor='white', font_size=12, bordercolor='#CBD5E1'),
+        height=700,
+    )
+    fig.update_xaxes(showline=True, linecolor='#E2E8F0', row=1, col=1)
+    fig.update_yaxes(showline=False, row=1, col=1, secondary_y=False)
+
+    return fig
+
+
 def plot_data_by_varname_plotly(df, var_name, Y):
     """Interactive plotly version of plot_data_by_varname.
 
@@ -340,7 +620,7 @@ def plot_data_by_varname_plotly(df, var_name, Y):
         row_heights=[0.72, 0.28],
         vertical_spacing=0.06,
         specs=[[{"secondary_y": True}],
-               [{"secondary_y": False}]],
+               [{"type": "table"}]],
     )
 
     # ── ±1 std band ───────────────────────────────────────────────────────
@@ -445,7 +725,7 @@ def plot_data_by_varname_plotly(df, var_name, Y):
         title_font=dict(color='grey'),
         tickfont=dict(color='grey'),
         showgrid=False,
-        range=[0, filtered_df['n_percentage'].max() * 3.5],
+        range=[0, 100],
         row=1, col=1, secondary_y=True,
     )
     fig.update_xaxes(tickangle=-40, row=1, col=1)
