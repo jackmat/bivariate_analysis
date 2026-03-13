@@ -16,5 +16,6 @@ dependencies = [
     "mkdocs-git-committers-plugin", # Git committers plugin (example)
     "mkdocs-gen-files",
     "python-markdown-math",
-    "pathlib"
+    "pathlib",
+    "plotly>=5.0.0",
 ]
