@@ -379,24 +379,14 @@ def plot_interactive_panel(df, Y):
     )
     output = widgets.Output()
 
-    def _in_colab():
-        try:
-            import google.colab  # noqa: F401
-            return True
-        except ImportError:
-            return False
-
     def render(var_name):
+        import plotly.io as pio
+        from IPython.display import HTML as _HTML
         with output:
             clear_output(wait=True)
             fig = _plot_varname_enhanced(df, var_name, Y)
-            if _in_colab():
-                display(fig)
-            else:
-                import plotly.io as pio
-                from IPython.display import HTML as _HTML
-                html = pio.to_html(fig, include_plotlyjs='cdn', full_html=False)
-                display(_HTML(html))
+            html = pio.to_html(fig, include_plotlyjs='cdn', full_html=False)
+            display(_HTML(html))
 
     def on_slider_change(change):
         if change['name'] == 'value':
