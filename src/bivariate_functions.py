@@ -386,8 +386,12 @@ def plot_interactive_panel(df, Y):
         with output:
             clear_output(wait=True)
             fig = _plot_varname_enhanced(df, var_name, Y)
-            html = pio.to_html(fig, include_plotlyjs=True, full_html=False)
-            display(HTML(html))
+            try:
+                import google.colab  # noqa: F401
+                fig.show()
+            except ImportError:
+                html = pio.to_html(fig, include_plotlyjs=True, full_html=False)
+                display(HTML(html))
 
     def on_slider_change(change):
         if change['name'] == 'value':
