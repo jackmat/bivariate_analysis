@@ -388,7 +388,7 @@ def plot_interactive_panel(df, Y):
             fig = _plot_varname_enhanced(df, var_name, Y)
             try:
                 import google.colab  # noqa: F401
-                fig.show()
+                display(fig)
             except ImportError:
                 html = pio.to_html(fig, include_plotlyjs=True, full_html=False)
                 display(HTML(html))
