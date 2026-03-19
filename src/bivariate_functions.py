@@ -388,10 +388,11 @@ def plot_interactive_panel(df, Y):
             fig = _plot_varname_enhanced(df, var_name, Y)
             try:
                 import google.colab  # noqa: F401
-                display(fig)
+                include_js = 'cdn'   # Colab allows CDN; display(fig) doesn't work inside Output
             except ImportError:
-                html = pio.to_html(fig, include_plotlyjs=True, full_html=False)
-                display(HTML(html))
+                include_js = True    # VS Code: embed JS inline (CDN blocked by CSP)
+            html = pio.to_html(fig, include_plotlyjs=include_js, full_html=False)
+            display(HTML(html))
 
     def on_slider_change(change):
         if change['name'] == 'value':
