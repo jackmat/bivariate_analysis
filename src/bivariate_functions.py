@@ -1,9 +1,12 @@
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, message='A NumPy version')
+
 import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeRegressor
 import matplotlib.pyplot as plt
 import seaborn as sns
-from IPython.display import display, HTML
+from IPython.display import display, HTML, clear_output
 from matplotlib.table import Table
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -329,7 +332,6 @@ def plot_interactive_panel(df, Y):
     Call from a Jupyter notebook cell.
     """
     import ipywidgets as widgets
-    from IPython.display import display, clear_output
 
     # max_discr is the same for every row of a variable – grab one per var
     var_discr = (
@@ -381,12 +383,11 @@ def plot_interactive_panel(df, Y):
 
     def render(var_name):
         import plotly.io as pio
-        from IPython.display import HTML as _HTML
         with output:
             clear_output(wait=True)
             fig = _plot_varname_enhanced(df, var_name, Y)
-            html = pio.to_html(fig, include_plotlyjs='cdn', full_html=False)
-            display(_HTML(html))
+            html = pio.to_html(fig, include_plotlyjs=True, full_html=False)
+            display(HTML(html))
 
     def on_slider_change(change):
         if change['name'] == 'value':
