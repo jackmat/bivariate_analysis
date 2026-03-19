@@ -1,0 +1,10 @@
+Requirement already satisfied: typing_extensions in c:\users\sansca\.pyenv\pyenv-win\versions\3.10.4\lib\site-packages (4.5.0)
+Collecting typing_extensions
+  Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+     -------------------------------------- 44.6/44.6 KB 731.4 kB/s eta 0:00:00
+Installing collected packages: typing_extensions
+  Attempting uninstall: typing_extensions
+    Found existing installation: typing_extensions 4.5.0
+    Uninstalling typing_extensions-4.5.0:
+      Successfully uninstalled typing_extensions-4.5.0
+Successfully installed typing_extensions-4.15.0

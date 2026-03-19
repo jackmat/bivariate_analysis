@@ -14,5 +14,7 @@ src/bivariate_analysis_example.ipynb
 # Visual Studio folder
 .vs/
 
+.vscode/
+
 # Claude settings
 .claude/
